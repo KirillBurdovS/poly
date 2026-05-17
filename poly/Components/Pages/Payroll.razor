@@ -1,0 +1,159 @@
+﻿@page "/payroll"
+@using poly.Models
+@using poly.Data
+@using Microsoft.EntityFrameworkCore
+@rendermode InteractiveServer
+@inject ApplicationDbContext DbContext
+
+<PageTitle>Начисления</PageTitle>
+
+<div class="payroll-container py-4">
+    <div class="container">
+        <h3 class="mb-4 text-purple fw-bold"><i class="bi bi-clock-history me-2"></i>Учёт времени</h3>
+
+        <div class="card border-0 shadow-sm mb-4 br-15">
+            <div class="card-body p-4">
+                <h5 class="card-title text-muted mb-4">Внести отработанные часы</h5>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold text-secondary">Сотрудник (только активные)</label>
+                        <select class="form-select custom-input" @onchange="OnEmployeeSelected">
+                            <option value="0">-- Выберите сотрудника --</option>
+                            @foreach (var emp in employees.Where(e => e.Status == EmployeeStatus.Active))
+                            {
+                                <option value="@emp.Id">@emp.FullName (@(emp.Department?.Name ?? "—"))</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold text-secondary">Часы</label>
+                        <input type="number" class="form-control custom-input" @bind="newLog.HoursWorked" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold text-secondary">Ставка</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control custom-input border-end-0" @bind="newLog.HourlyRate" />
+                            <span class="input-group-text custom-input-text">₽</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-purple w-100 rounded-pill py-2 shadow-sm" @onclick="AddWorkLog">Зафиксировать</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm br-15 overflow-hidden">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-purple-light">
+                    <tr>
+                        <th class="ps-4">Дата</th>
+                        <th>Сотрудник</th>
+                        <th>Часы</th>
+                        <th>Сумма</th>
+                        <th class="text-center">Действие</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in workLogs)
+                    {
+                        <tr>
+                            <td class="ps-4 text-muted">@log.Date.ToShortDateString()</td>
+                            <td class="fw-bold">@log.Employee?.FullName</td>
+                            <td><span class="badge bg-lavender text-purple">@log.HoursWorked ч.</span></td>
+                            <td class="fw-bold text-purple-dark">@log.TotalSalary.ToString("N0") ₽</td>
+                            <td class="text-center">
+                                <button class="btn btn-sm text-danger" @onclick="() => DeleteLog(log.Id)"><i class="bi bi-trash3"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .payroll-container {
+        min-height: 100vh;
+        background-color: #f3f0f7;
+    }
+
+    .text-purple {
+        color: #6f42c1;
+    }
+
+    .text-purple-dark {
+        color: #4b2c85;
+    }
+
+    .bg-purple-light {
+        background-color: #f8f6ff;
+    }
+
+    .bg-lavender {
+        background-color: #e9e4ff;
+    }
+
+    .br-15 {
+        border-radius: 15px;
+    }
+
+    .btn-purple {
+        background-color: #6f42c1;
+        color: white;
+    }
+
+    .custom-input {
+        border: 1px solid #e1ddec;
+        border-radius: 8px;
+        padding: 0.6rem;
+    }
+
+    .custom-input-text {
+        background-color: white;
+        border: 1px solid #e1ddec;
+        border-left: none;
+        color: #6f42c1;
+    }
+</style>
+
+@code {
+    private List<Employee> employees = new();
+    private List<WorkLog> workLogs = new();
+    private WorkLog newLog = new() { HoursWorked = 8 };
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        employees = await DbContext.Employees.Include(e => e.Position).Include(e => e.Department).ToListAsync();
+        workLogs = await DbContext.WorkLogs.Include(l => l.Employee).OrderByDescending(l => l.Date).ToListAsync();
+    }
+
+    private void OnEmployeeSelected(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int id))
+        {
+            newLog.EmployeeId = id;
+            var emp = employees.FirstOrDefault(x => x.Id == id);
+            if (emp?.Position != null) newLog.HourlyRate = emp.Position.BaseSalary;
+        }
+    }
+
+    private async Task AddWorkLog()
+    {
+        if (newLog.EmployeeId == 0) return;
+        newLog.Date = DateTime.Now;
+        DbContext.WorkLogs.Add(newLog);
+        await DbContext.SaveChangesAsync();
+        newLog = new WorkLog { HoursWorked = 8, HourlyRate = newLog.HourlyRate };
+        await LoadData();
+    }
+
+    private async Task DeleteLog(int id)
+    {
+        var log = await DbContext.WorkLogs.FindAsync(id);
+        if (log != null) { DbContext.WorkLogs.Remove(log); await DbContext.SaveChangesAsync(); await LoadData(); }
+    }
+}

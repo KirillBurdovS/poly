@@ -1,0 +1,111 @@
+﻿@page "/departments"
+@using poly.Models
+@using poly.Data
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@rendermode InteractiveServer
+
+<div class="departments-container py-4">
+    <div class="container">
+        <h3 class="mb-4 text-purple fw-bold"><i class="bi bi-diagram-3-fill me-2"></i>Отделы предприятия</h3>
+
+        <div class="card border-0 shadow-sm mb-4 br-15">
+            <div class="card-body p-4">
+                <h5 class="card-title text-muted mb-4">Создать новый отдел</h5>
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <input type="text" class="form-control custom-input" placeholder="Название (например: ИТ-отдел)" @bind="newDept.Name" />
+                    </div>
+                    <div class="col-md-4">
+                        <input type="text" class="form-control custom-input" placeholder="Описание" @bind="newDept.Description" />
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-purple w-100 rounded-pill py-2" @onclick="AddDept">Добавить</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            @foreach (var dept in depts)
+            {
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm br-15 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <h5 class="fw-bold text-purple-dark">@dept.Name</h5>
+                                <button class="btn btn-sm text-danger" @onclick="() => DeleteDept(dept.Id)"><i class="bi bi-x-lg"></i></button>
+                            </div>
+                            <p class="text-muted small">@dept.Description</p>
+                            <hr class="opacity-25">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-lavender text-purple">@dept.Employees.Count сотрудников</span>
+                                <a href="employees" class="btn btn-link btn-sm text-purple p-0">Список</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .departments-container {
+        min-height: 100vh;
+        background-color: #f3f0f7;
+    }
+
+    .text-purple {
+        color: #6f42c1;
+    }
+
+    .text-purple-dark {
+        color: #4b2c85;
+    }
+
+    .bg-lavender {
+        background-color: #e9e4ff;
+    }
+
+    .br-15 {
+        border-radius: 15px;
+    }
+
+    .btn-purple {
+        background-color: #6f42c1;
+        color: white;
+    }
+
+    .custom-input {
+        border: 1px solid #e1ddec;
+        border-radius: 8px;
+        padding: 0.6rem;
+    }
+</style>
+
+@code {
+    private List<Department> depts = new();
+    private Department newDept = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load() => depts = await DbContext.Departments.Include(d => d.Employees).ToListAsync();
+
+    private async Task AddDept()
+    {
+        if (!string.IsNullOrWhiteSpace(newDept.Name))
+        {
+            DbContext.Departments.Add(newDept);
+            await DbContext.SaveChangesAsync();
+            newDept = new();
+            await Load();
+        }
+    }
+
+    private async Task DeleteDept(int id)
+    {
+        var d = await DbContext.Departments.FindAsync(id);
+        if (d != null) { DbContext.Departments.Remove(d); await DbContext.SaveChangesAsync(); await Load(); }
+    }
+}

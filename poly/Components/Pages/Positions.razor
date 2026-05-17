@@ -1,0 +1,185 @@
+﻿@page "/positions"
+@using poly.Models
+@using poly.Data
+@using Microsoft.EntityFrameworkCore
+@rendermode InteractiveServer
+@inject ApplicationDbContext DbContext
+
+<PageTitle>Справочник должностей</PageTitle>
+
+<div class="positions-container py-4">
+    <div class="container">
+        <h3 class="mb-4 text-purple fw-bold"><i class="bi bi-briefcase-fill me-2"></i>Справочник должностей</h3>
+
+        <!-- Панель добавления -->
+        <div class="card border-0 shadow-sm mb-4 br-15">
+            <div class="card-body p-4">
+                <h5 class="card-title text-muted mb-4">Создать новую штатную единицу</h5>
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold text-secondary">Название должности</label>
+                        <input type="text" class="form-control custom-input" placeholder="Например: Старший аналитик" @bind="newPos.Title" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold text-secondary">Часовая ставка</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control custom-input border-end-0" @bind="newPos.BaseSalary" />
+                            <span class="input-group-text custom-input-text">₽ / час</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-purple w-100 rounded-pill py-2 shadow-sm" @onclick="AddPosition">
+                            <i class="bi bi-plus-lg me-2"></i>Добавить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Список должностей -->
+        <div class="card border-0 shadow-sm br-15 overflow-hidden">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-purple-light">
+                        <tr>
+                            <th class="ps-4" style="width: 100px;">ID</th>
+                            <th>Наименование</th>
+                            <th>Ставка (в час)</th>
+                            <th class="text-center" style="width: 150px;">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (positions == null)
+                        {
+                            <tr><td colspan="4" class="text-center py-5 text-muted">Загрузка данных...</td></tr>
+                        }
+                        else if (!positions.Any())
+                        {
+                            <tr><td colspan="4" class="text-center py-5 text-muted">Список должностей пуст. Добавьте первую запись выше.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var pos in positions)
+                            {
+                                <tr>
+                                    <td class="ps-4 text-muted">#@pos.Id</td>
+                                    <td class="fw-bold text-purple-dark">@pos.Title</td>
+                                    <td>
+                                        <span class="badge bg-lavender text-purple px-3 py-2">
+                                            @pos.BaseSalary.ToString("N0") ₽
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-outline-danger border-0" @onclick="() => DeletePosition(pos)">
+                                            <i class="bi bi-trash3-fill"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .positions-container {
+        min-height: 100vh;
+        background-color: #f3f0f7;
+    }
+
+    .text-purple {
+        color: #6f42c1;
+    }
+
+    .text-purple-dark {
+        color: #4b2c85;
+    }
+
+    .bg-purple-light {
+        background-color: #f8f6ff;
+    }
+
+    .bg-lavender {
+        background-color: #e9e4ff;
+    }
+
+    .br-15 {
+        border-radius: 15px;
+    }
+
+    .btn-purple {
+        background-color: #6f42c1;
+        color: white;
+        transition: 0.3s;
+    }
+
+        .btn-purple:hover {
+            background-color: #59359a;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+    .custom-input {
+        border: 1px solid #e1ddec;
+        border-radius: 8px;
+        padding: 0.6rem;
+    }
+
+        .custom-input:focus {
+            border-color: #a389d4;
+            box-shadow: 0 0 0 0.2rem rgba(111, 66, 193, 0.1);
+        }
+
+    .custom-input-text {
+        background-color: white;
+        border: 1px solid #e1ddec;
+        border-left: none;
+        color: #6f42c1;
+    }
+
+    .table thead th {
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6f42c1;
+        border-bottom: none;
+        padding: 1.2rem 0.75rem;
+    }
+</style>
+
+@code {
+    private List<Position>? positions;
+    private Position newPos = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPositions();
+    }
+
+    private async Task LoadPositions()
+    {
+        positions = await DbContext.Positions.ToListAsync();
+    }
+
+    private async Task AddPosition()
+    {
+        if (!string.IsNullOrWhiteSpace(newPos.Title))
+        {
+            DbContext.Positions.Add(newPos);
+            await DbContext.SaveChangesAsync();
+            newPos = new Position();
+            await LoadPositions();
+        }
+    }
+
+    private async Task DeletePosition(Position pos)
+    {
+        DbContext.Positions.Remove(pos);
+        await DbContext.SaveChangesAsync();
+        await LoadPositions();
+    }
+}

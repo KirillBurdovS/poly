@@ -1,0 +1,178 @@
+﻿@page "/"
+@using poly.Models
+@using poly.Data
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@rendermode InteractiveServer
+
+<div class="main-wrapper">
+    <div class="container py-5">
+
+        <!-- Приветственный блок -->
+        <div class="welcome-banner p-5 mb-5 shadow-lg text-white">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="display-4 fw-bold mb-3">Управление предприятием</h1>
+                    <p class="lead opacity-75 mb-4">Автоматизированный учет кадров, штатного расписания и расчет фонда оплаты труда.</p>
+                    <div class="d-flex gap-3">
+                        <a href="employees" class="btn btn-light rounded-pill px-4 shadow-sm text-purple fw-bold">Штат</a>
+                        <a href="payroll" class="btn btn-outline-light rounded-pill px-4">Выплаты</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Сводные карточки -->
+        <div class="row g-4 mb-5">
+            <div class="col-md-4">
+                <div class="stat-card p-4 shadow-sm border-0">
+                    <div class="icon-circle mb-3"><i class="bi bi-building"></i></div>
+                    <div class="small text-uppercase text-muted fw-bold">Подразделения</div>
+                    <div class="h2 fw-bold text-purple-dark">@deptStats.Count</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card p-4 shadow-sm border-0">
+                    <div class="icon-circle mb-3 color-2"><i class="bi bi-people-fill"></i></div>
+                    <div class="small text-uppercase text-muted fw-bold">Всего сотрудников</div>
+                    <div class="h2 fw-bold text-purple-dark">@totalEmployees</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card p-4 shadow-sm border-0">
+                    <div class="icon-circle mb-3 color-3"><i class="bi bi-cash-coin"></i></div>
+                    <div class="small text-uppercase text-muted fw-bold">Фонд оплаты (мес)</div>
+                    <div class="h2 fw-bold text-purple-dark">@totalSalary.ToString("N0") ₽</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Аналитика по отделам -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm br-15 p-4">
+                    <h5 class="fw-bold text-purple-dark mb-4">Распределение ресурсов по отделам</h5>
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead class="text-muted small text-uppercase">
+                                <tr>
+                                    <th>Отдел</th>
+                                    <th>Сотрудников</th>
+                                    <th>Доля в штате</th>
+                                    <th class="text-end">Затраты (мес)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var stat in deptStats)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@stat.DeptName</td>
+                                        <td>@stat.Count чел.</td>
+                                        <td style="width: 30%;">
+                                            <div class="progress" style="height: 8px;">
+                                                <div class="progress-bar bg-purple" style="width: @(totalEmployees > 0 ? (stat.Count * 100 / totalEmployees) : 0)%"></div>
+                                            </div>
+                                        </td>
+                                        <td class="text-end fw-bold">@stat.SalarySum.ToString("N0") ₽</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .main-wrapper {
+        min-height: 100vh;
+        background-color: #f3f0f7;
+    }
+
+    .text-purple {
+        color: #6f42c1;
+    }
+
+    .text-purple-dark {
+        color: #4b2c85;
+    }
+
+    .bg-purple {
+        background-color: #6f42c1;
+    }
+
+    .welcome-banner {
+        background: linear-gradient(135deg, #6f42c1 0%, #4b2c85 100%);
+        border-radius: 24px;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 20px;
+        transition: 0.3s;
+    }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+    .icon-circle {
+        width: 50px;
+        height: 50px;
+        background: #f8f6ff;
+        color: #6f42c1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        font-size: 1.5rem;
+    }
+
+        .icon-circle.color-2 {
+            background: #fff4e6;
+            color: #fd7e14;
+        }
+
+        .icon-circle.color-3 {
+            background: #ebfbee;
+            color: #40c057;
+        }
+
+    .br-15 {
+        border-radius: 15px;
+    }
+</style>
+
+@code {
+    private int totalEmployees;
+    private decimal totalSalary;
+    private List<DeptStat> deptStats = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var employees = await DbContext.Employees.Include(e => e.Department).ToListAsync();
+        totalEmployees = employees.Count;
+        totalSalary = employees.Sum(e => e.Salary);
+
+        // Группируем данные для таблицы анализа
+        deptStats = employees
+            .GroupBy(e => e.Department?.Name ?? "Без отдела")
+            .Select(g => new DeptStat
+            {
+                DeptName = g.Key,
+                Count = g.Count(),
+                SalarySum = g.Sum(e => e.Salary)
+            })
+            .OrderByDescending(s => s.SalarySum)
+            .ToList();
+    }
+
+    private class DeptStat
+    {
+        public string DeptName { get; set; } = "";
+        public int Count { get; set; }
+        public decimal SalarySum { get; set; }
+    }
+}
