@@ -1,35 +1,39 @@
 ﻿@page "/employees"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
 @using poly.Models
 @using poly.Data
 @using Microsoft.EntityFrameworkCore
 @rendermode InteractiveServer
-@inject ApplicationDbContext DbContext
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IJSRuntime JS
 
-<PageTitle>Учет персонала</PageTitle>
+<PageTitle>Сотрудники</PageTitle>
 
-<div class="employees-container py-4 no-print">
+<div class="page-bg no-print">
     <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3 class="text-purple fw-bold mb-0"><i class="bi bi-people-fill me-2"></i>Управление кадрами</h3>
-            <button class="btn btn-outline-purple rounded-pill px-4 shadow-sm" @onclick="PrintReport">
-                <i class="bi bi-printer me-2"></i>Печать отчета
+        <div class="page-header">
+            <div>
+                <h3 class="page-title"><i class="bi bi-people"></i>Сотрудники</h3>
+                <p class="page-subtitle">Приём, перевод и учёт персонала</p>
+            </div>
+            <button class="btn btn-outline-purple px-3" @onclick="PrintReport">
+                <i class="bi bi-printer me-2"></i>Печать отчёта
             </button>
         </div>
 
-        <!-- Форма найма -->
-        <div class="card border-0 shadow-sm mb-4 br-15">
+        <div class="card br-15 mb-4">
             <div class="card-body p-4">
-                <h5 class="card-title text-muted mb-4">Оформить нового сотрудника</h5>
+                <h5 class="card-title mb-3">Оформить нового сотрудника</h5>
                 <div class="row g-3">
                     <div class="col-md-3">
-                        <label class="form-label small fw-bold text-secondary">ФИО</label>
-                        <input type="text" class="form-control custom-input" @bind="newEmployee.FullName" placeholder="ФИО" />
+                        <label class="form-label">ФИО</label>
+                        <input type="text" class="form-control custom-input" @bind="newEmployee.FullName" placeholder="Иванов Иван Иванович" />
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label small fw-bold text-secondary">Отдел</label>
+                        <label class="form-label">Отдел</label>
                         <select class="form-select custom-input" @bind="newEmployee.DepartmentId">
-                            <option value="0">-- Отдел --</option>
+                            <option value="0">Выберите</option>
                             @foreach (var dept in availableDepartments)
                             {
                                 <option value="@dept.Id">@dept.Name</option>
@@ -37,9 +41,9 @@
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label small fw-bold text-secondary">Должность</label>
+                        <label class="form-label">Должность</label>
                         <select class="form-select custom-input" @bind="newEmployee.PositionId">
-                            <option value="0">-- Должность --</option>
+                            <option value="0">Выберите</option>
                             @foreach (var pos in availablePositions)
                             {
                                 <option value="@pos.Id">@pos.Title</option>
@@ -47,36 +51,38 @@
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label small fw-bold text-secondary">Статус</label>
+                        <label class="form-label">Статус</label>
                         <select class="form-select custom-input" @bind="newEmployee.Status">
-                            @foreach (EmployeeStatus status in Enum.GetValues(typeof(EmployeeStatus)))
+                            @foreach (EmployeeStatus status in Enum.GetValues<EmployeeStatus>())
                             {
-                                <option value="@status">@GetStatusText(status)</option>
+                                <option value="@status">@status.ToText()</option>
                             }
                         </select>
                     </div>
-                    <div class="col-md-1">
-                        <label class="form-label small fw-bold text-secondary">Оклад</label>
-                        <input type="number" class="form-control custom-input" @bind="newEmployee.Salary" />
+                    <div class="col-md-2">
+                        <label class="form-label">Оклад, ₽</label>
+                        <input type="number" min="1" class="form-control custom-input" @bind="newEmployee.Salary" />
                     </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button class="btn btn-purple w-100 rounded-pill py-2 shadow-sm" @onclick="AddEmployee">Нанять</button>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button class="btn btn-purple w-100 py-2" title="Нанять" @onclick="AddEmployee"><i class="bi bi-person-plus"></i></button>
                     </div>
                 </div>
+                @if (error != null)
+                {
+                    <div class="alert alert-danger mt-3 mb-0">@error</div>
+                }
             </div>
         </div>
 
-        <!-- Фильтры поиска -->
         <div class="row mb-3 g-2">
             <div class="col-md-8">
-                <div class="input-group shadow-sm br-8 overflow-hidden">
-                    <span class="input-group-text bg-white border-0"><i class="bi bi-search text-muted"></i></span>
-                    <input type="text" class="form-control border-0 custom-input"
-                           placeholder="Поиск по ФИО..." @bind="searchTerm" @bind:event="oninput" />
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text" class="form-control" placeholder="Поиск по ФИО..." @bind="searchTerm" @bind:event="oninput" />
                 </div>
             </div>
             <div class="col-md-4">
-                <select class="form-select custom-input shadow-sm" @bind="filterDeptId">
+                <select class="form-select" @bind="filterDeptId">
                     <option value="0">Все отделы</option>
                     @foreach (var dept in availableDepartments)
                     {
@@ -86,39 +92,41 @@
             </div>
         </div>
 
-        <!-- Таблица штата -->
-        <div class="card border-0 shadow-sm br-15 overflow-hidden">
+        <div class="card br-15 overflow-hidden">
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-purple-light text-purple">
+                <table class="table table-hover align-middle">
+                    <thead>
                         <tr>
-                            <th class="ps-4">Статус</th>
-                            <th>ФИО</th>
+                            <th class="ps-4">Сотрудник</th>
                             <th>Отдел / Должность</th>
-                            <th>Оклад</th>
-                            <th class="text-center">Действия</th>
+                            <th>Статус</th>
+                            <th class="text-end">Оклад</th>
+                            <th class="text-end pe-4"></th>
                         </tr>
                     </thead>
                     <tbody>
+                        @if (!FilteredEmployees.Any())
+                        {
+                            <tr><td colspan="5" class="empty-state"><i class="bi bi-person-x"></i>Сотрудники не найдены</td></tr>
+                        }
                         @foreach (var emp in FilteredEmployees)
                         {
                             <tr>
                                 <td class="ps-4">
-                                    <span class="badge rounded-pill @GetStatusClass(emp.Status)">@GetStatusText(emp.Status)</span>
-                                </td>
-                                <td class="fw-bold">
-                                    <a href="employees/@emp.Id" class="text-purple-dark text-decoration-none employee-link">
-                                        @emp.FullName <i class="bi bi-box-arrow-in-right opacity-50 ms-1"></i>
+                                    <a href="employees/@emp.Id" class="d-flex align-items-center gap-3 text-decoration-none employee-link">
+                                        <span class="person-avatar">@Initials(emp.FullName)</span>
+                                        <span class="fw-semibold">@emp.FullName</span>
                                     </a>
                                 </td>
                                 <td>
-                                    <small class="text-muted d-block">@(emp.Department?.Name ?? "—")</small>
-                                    <span class="text-purple small fw-bold">@(emp.Position?.Title ?? "—")</span>
+                                    <div class="fw-medium">@(emp.Position?.Title ?? "—")</div>
+                                    <small class="text-muted">@(emp.Department?.Name ?? "—")</small>
                                 </td>
-                                <td class="fw-bold">@emp.Salary.ToString("N0") ₽</td>
-                                <td class="text-center">
-                                    <button class="btn btn-sm text-primary me-2" @onclick="() => EditEmployee(emp)"><i class="bi bi-pencil-square"></i></button>
-                                    <button class="btn btn-sm text-danger" @onclick="() => DeleteEmployee(emp.Id)"><i class="bi bi-trash3"></i></button>
+                                <td><span class="badge @emp.Status.BadgeClass()">@emp.Status.ToText()</span></td>
+                                <td class="text-end fw-semibold">@emp.Salary.ToString("N0") ₽</td>
+                                <td class="text-end pe-4 text-nowrap">
+                                    <button class="btn-icon" title="Редактировать" @onclick="() => EditEmployee(emp)"><i class="bi bi-pencil"></i></button>
+                                    <button class="btn-icon danger" title="Удалить" @onclick="() => DeleteEmployee(emp)"><i class="bi bi-trash3"></i></button>
                                 </td>
                             </tr>
                         }
@@ -132,35 +140,64 @@
 <!-- Модальное окно редактирования -->
 @if (isEditing)
 {
-    <div class="modal fade show d-block" style="background: rgba(0,0,0,0.5); z-index: 1050;">
+    <div class="modal fade show d-block modal-backdrop-soft">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content br-15 border-0 shadow-lg">
-                <div class="modal-header bg-purple text-white br-top-15">
-                    <h5 class="modal-title">Редактирование сотрудника</h5>
-                    <button type="button" class="btn-close btn-close-white" @onclick="CancelEdit"></button>
+            <div class="modal-content border-0">
+                <div class="modal-header border-0 px-4 pt-4 pb-0">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="person-avatar">@Initials(editingEmployee.FullName)</span>
+                        <h5 class="modal-title fw-semibold">Редактирование сотрудника</h5>
+                    </div>
+                    <button type="button" class="btn-close" @onclick="CancelEdit"></button>
                 </div>
                 <div class="modal-body p-4">
                     <div class="mb-3">
-                        <label class="form-label small fw-bold text-secondary">ФИО</label>
+                        <label class="form-label">ФИО</label>
                         <input type="text" class="form-control custom-input" @bind="editingEmployee.FullName" />
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold text-secondary">Месячный оклад</label>
-                        <input type="number" class="form-control custom-input" @bind="editingEmployee.Salary" />
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Отдел</label>
+                            <select class="form-select custom-input" @bind="editingEmployee.DepartmentId">
+                                @foreach (var dept in availableDepartments)
+                                {
+                                    <option value="@dept.Id">@dept.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Должность</label>
+                            <select class="form-select custom-input" @bind="editingEmployee.PositionId">
+                                @foreach (var pos in availablePositions)
+                                {
+                                    <option value="@pos.Id">@pos.Title</option>
+                                }
+                            </select>
+                        </div>
                     </div>
-                    <div class="mb-0">
-                        <label class="form-label small fw-bold text-secondary">Статус</label>
+                    <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label">Месячный оклад, ₽</label>
+                        <input type="number" min="1" class="form-control custom-input" @bind="editingEmployee.Salary" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Статус</label>
                         <select class="form-select custom-input" @bind="editingEmployee.Status">
-                            @foreach (EmployeeStatus status in Enum.GetValues(typeof(EmployeeStatus)))
+                            @foreach (EmployeeStatus status in Enum.GetValues<EmployeeStatus>())
                             {
-                                <option value="@status">@GetStatusText(status)</option>
+                                <option value="@status">@status.ToText()</option>
                             }
                         </select>
                     </div>
+                    </div>
+                    @if (editError != null)
+                    {
+                        <div class="alert alert-danger mt-3 mb-0">@editError</div>
+                    }
                 </div>
-                <div class="modal-footer border-0 p-3">
-                    <button class="btn btn-light rounded-pill px-4" @onclick="CancelEdit">Отмена</button>
-                    <button class="btn btn-purple rounded-pill px-4 shadow-sm" @onclick="SaveEdit">Сохранить</button>
+                <div class="modal-footer border-0 px-4 pb-4 pt-0">
+                    <button class="btn btn-light px-4" @onclick="CancelEdit">Отмена</button>
+                    <button class="btn btn-purple px-4" @onclick="SaveEdit">Сохранить</button>
                 </div>
             </div>
         </div>
@@ -188,7 +225,7 @@
                     <td>@emp.FullName</td>
                     <td>@emp.Department?.Name</td>
                     <td>@emp.Position?.Title</td>
-                    <td>@GetStatusText(emp.Status)</td>
+                    <td>@emp.Status.ToText()</td>
                     <td>@emp.Salary.ToString("N0") ₽</td>
                 </tr>
             }
@@ -197,68 +234,13 @@
 </div>
 
 <style>
-    .employees-container {
-        min-height: 100vh;
-        background-color: #f3f0f7;
+    .employee-link {
+        color: var(--text);
     }
 
-    .text-purple {
-        color: #6f42c1;
-    }
-
-    .text-purple-dark {
-        color: #4b2c85;
-    }
-
-    .bg-purple-light {
-        background-color: #f8f6ff;
-    }
-
-    .bg-purple {
-        background-color: #6f42c1;
-    }
-
-    .br-15 {
-        border-radius: 15px;
-    }
-
-    .br-top-15 {
-        border-top-left-radius: 15px;
-        border-top-right-radius: 15px;
-    }
-
-    .btn-purple {
-        background-color: #6f42c1;
-        color: white;
-        transition: 0.3s;
-    }
-
-        .btn-purple:hover {
-            background-color: #59359a;
-            color: white;
-            transform: translateY(-2px);
+        .employee-link:hover {
+            color: var(--brand);
         }
-
-    .btn-outline-purple {
-        color: #6f42c1;
-        border-color: #6f42c1;
-    }
-
-        .btn-outline-purple:hover {
-            background-color: #6f42c1;
-            color: white;
-        }
-
-    .custom-input {
-        border: 1px solid #e1ddec;
-        border-radius: 8px;
-        padding: 0.6rem;
-    }
-
-    .employee-link:hover {
-        color: #6f42c1 !important;
-        text-decoration: underline !important;
-    }
 
     .print-only {
         display: none;
@@ -280,36 +262,65 @@
 </style>
 
 @code {
+    [SupplyParameterFromQuery(Name = "dept")]
+    public int? DeptFromQuery { get; set; }
+
     private List<Employee> employees = new();
     private List<Position> availablePositions = new();
     private List<Department> availableDepartments = new();
 
-    private Employee newEmployee = new() { PositionId = 0, DepartmentId = 0, Status = EmployeeStatus.Active };
+    private Employee newEmployee = NewEmployee();
     private Employee editingEmployee = new();
 
     private string searchTerm = "";
     private int filterDeptId = 0;
     private bool isEditing = false;
+    private string? error;
+    private string? editError;
 
     private IEnumerable<Employee> FilteredEmployees => employees
         .Where(e => string.IsNullOrWhiteSpace(searchTerm) || e.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
         .Where(e => filterDeptId == 0 || e.DepartmentId == filterDeptId);
 
-    protected override async Task OnInitializedAsync() => await LoadData();
+    private static string Initials(string? fullName) => string.Concat(
+        (fullName ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpper(p[0])));
+
+    private static Employee NewEmployee() => new() { PositionId = 0, DepartmentId = 0, Status = EmployeeStatus.Active };
+
+    protected override async Task OnInitializedAsync()
+    {
+        filterDeptId = DeptFromQuery ?? 0;
+        await LoadData();
+    }
 
     private async Task LoadData()
     {
-        employees = await DbContext.Employees.Include(e => e.Position).Include(e => e.Department).ToListAsync();
-        availablePositions = await DbContext.Positions.ToListAsync();
-        availableDepartments = await DbContext.Departments.ToListAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        employees = await db.Employees.Include(e => e.Position).Include(e => e.Department)
+            .OrderBy(e => e.FullName).ToListAsync();
+        availablePositions = await db.Positions.OrderBy(p => p.Title).ToListAsync();
+        availableDepartments = await db.Departments.OrderBy(d => d.Name).ToListAsync();
+    }
+
+    private static string? Validate(Employee emp)
+    {
+        if (string.IsNullOrWhiteSpace(emp.FullName)) return "Введите ФИО сотрудника.";
+        if (emp.DepartmentId == 0) return "Выберите отдел.";
+        if (emp.PositionId == 0) return "Выберите должность.";
+        if (emp.Salary <= 0) return "Оклад должен быть больше нуля.";
+        return null;
     }
 
     private async Task AddEmployee()
     {
-        if (string.IsNullOrWhiteSpace(newEmployee.FullName) || newEmployee.PositionId == 0 || newEmployee.DepartmentId == 0) return;
-        DbContext.Employees.Add(newEmployee);
-        await DbContext.SaveChangesAsync();
-        newEmployee = new Employee() { PositionId = 0, DepartmentId = 0, Status = EmployeeStatus.Active };
+        newEmployee.FullName = newEmployee.FullName.Trim();
+        error = Validate(newEmployee);
+        if (error != null) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Employees.Add(newEmployee);
+        await db.SaveChangesAsync();
+        newEmployee = NewEmployee();
         await LoadData();
     }
 
@@ -324,47 +335,47 @@
             DepartmentId = emp.DepartmentId,
             PositionId = emp.PositionId
         };
+        editError = null;
         isEditing = true;
     }
 
     private async Task SaveEdit()
     {
-        var dbEmp = await DbContext.Employees.FindAsync(editingEmployee.Id);
+        editingEmployee.FullName = editingEmployee.FullName.Trim();
+        editError = Validate(editingEmployee);
+        if (editError != null) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var dbEmp = await db.Employees.FindAsync(editingEmployee.Id);
         if (dbEmp != null)
         {
             dbEmp.FullName = editingEmployee.FullName;
             dbEmp.Salary = editingEmployee.Salary;
             dbEmp.Status = editingEmployee.Status;
-            await DbContext.SaveChangesAsync();
-            isEditing = false;
-            await LoadData();
+            dbEmp.DepartmentId = editingEmployee.DepartmentId;
+            dbEmp.PositionId = editingEmployee.PositionId;
+            await db.SaveChangesAsync();
         }
+        isEditing = false;
+        await LoadData();
     }
 
     private void CancelEdit() => isEditing = false;
 
-    private async Task DeleteEmployee(int id)
+    private async Task DeleteEmployee(Employee emp)
     {
-        var emp = await DbContext.Employees.FindAsync(id);
-        if (emp != null) { DbContext.Employees.Remove(emp); await DbContext.SaveChangesAsync(); await LoadData(); }
+        error = null;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (await db.WorkLogs.AnyAsync(l => l.EmployeeId == emp.Id))
+        {
+            error = $"У сотрудника «{emp.FullName}» есть история начислений. Вместо удаления установите статус «Уволен».";
+            return;
+        }
+        if (!await JS.InvokeAsync<bool>("confirm", $"Удалить сотрудника «{emp.FullName}»?")) return;
+
+        await db.Employees.Where(e => e.Id == emp.Id).ExecuteDeleteAsync();
+        await LoadData();
     }
 
     private async Task PrintReport() => await JS.InvokeVoidAsync("window.print");
-
-    private string GetStatusText(EmployeeStatus status) => status switch
-    {
-        EmployeeStatus.Active => "Работает",
-        EmployeeStatus.OnLeave => "В отпуске",
-        EmployeeStatus.Sick => "Болеет",
-        EmployeeStatus.Terminated => "Уволен",
-        _ => "—"
-    };
-
-    private string GetStatusClass(EmployeeStatus status) => status switch
-    {
-        EmployeeStatus.Active => "bg-success",
-        EmployeeStatus.OnLeave => "bg-warning text-dark",
-        EmployeeStatus.Sick => "bg-danger",
-        _ => "bg-secondary"
-    };
 }

@@ -1,24 +1,36 @@
 ﻿@page "/payroll"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
 @using poly.Models
 @using poly.Data
 @using Microsoft.EntityFrameworkCore
 @rendermode InteractiveServer
-@inject ApplicationDbContext DbContext
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
 
-<PageTitle>Начисления</PageTitle>
+<PageTitle>Зарплаты</PageTitle>
 
-<div class="payroll-container py-4">
+<div class="page-bg">
     <div class="container">
-        <h3 class="mb-4 text-purple fw-bold"><i class="bi bi-clock-history me-2"></i>Учёт времени</h3>
+        <div class="page-header">
+            <div>
+                <h3 class="page-title"><i class="bi bi-wallet2"></i>Зарплаты</h3>
+                <p class="page-subtitle">Учёт отработанных часов и начислений</p>
+            </div>
+            <div class="summary-chip">
+                <span class="text-muted small">Начислено всего</span>
+                <span class="fw-bold">@workLogs.Sum(l => l.TotalSalary).ToString("N0") ₽</span>
+            </div>
+        </div>
 
-        <div class="card border-0 shadow-sm mb-4 br-15">
+        <div class="card br-15 mb-4">
             <div class="card-body p-4">
-                <h5 class="card-title text-muted mb-4">Внести отработанные часы</h5>
+                <h5 class="card-title mb-3">Внести отработанные часы</h5>
                 <div class="row g-3">
                     <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary">Сотрудник (только активные)</label>
-                        <select class="form-select custom-input" @onchange="OnEmployeeSelected">
-                            <option value="0">-- Выберите сотрудника --</option>
+                        <label class="form-label">Сотрудник (только работающие)</label>
+                        <select class="form-select custom-input" value="@newLog.EmployeeId" @onchange="OnEmployeeSelected">
+                            <option value="0">Выберите сотрудника</option>
                             @foreach (var emp in employees.Where(e => e.Status == EmployeeStatus.Active))
                             {
                                 <option value="@emp.Id">@emp.FullName (@(emp.Department?.Name ?? "—"))</option>
@@ -26,134 +38,115 @@
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label small fw-bold text-secondary">Часы</label>
-                        <input type="number" class="form-control custom-input" @bind="newLog.HoursWorked" />
+                        <label class="form-label">Часы</label>
+                        <input type="number" min="0.5" max="24" step="0.5" class="form-control custom-input" @bind="newLog.HoursWorked" />
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label small fw-bold text-secondary">Ставка</label>
+                        <label class="form-label">Ставка</label>
                         <div class="input-group">
-                            <input type="number" class="form-control custom-input border-end-0" @bind="newLog.HourlyRate" />
-                            <span class="input-group-text custom-input-text">₽</span>
+                            <input type="number" min="0" step="0.01" class="form-control custom-input border-end-0" @bind="newLog.HourlyRate" />
+                            <span class="input-group-text custom-input-text">₽ / час</span>
                         </div>
                     </div>
                     <div class="col-md-3 d-flex align-items-end">
-                        <button class="btn btn-purple w-100 rounded-pill py-2 shadow-sm" @onclick="AddWorkLog">Зафиксировать</button>
+                        <button class="btn btn-purple w-100 py-2" @onclick="AddWorkLog"><i class="bi bi-check2 me-1"></i>Зафиксировать</button>
                     </div>
                 </div>
+                @if (error != null)
+                {
+                    <div class="alert alert-danger mt-3 mb-0">@error</div>
+                }
             </div>
         </div>
 
-        <div class="card border-0 shadow-sm br-15 overflow-hidden">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="bg-purple-light">
+        <div class="card br-15 overflow-hidden">
+            <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
                     <tr>
                         <th class="ps-4">Дата</th>
                         <th>Сотрудник</th>
                         <th>Часы</th>
-                        <th>Сумма</th>
-                        <th class="text-center">Действие</th>
+                        <th>Ставка</th>
+                        <th class="text-end">Сумма</th>
+                        <th class="text-end pe-4"></th>
                     </tr>
                 </thead>
                 <tbody>
+                    @if (!workLogs.Any())
+                    {
+                        <tr><td colspan="6" class="empty-state"><i class="bi bi-clock-history"></i>Записей пока нет</td></tr>
+                    }
                     @foreach (var log in workLogs)
                     {
                         <tr>
                             <td class="ps-4 text-muted">@log.Date.ToShortDateString()</td>
-                            <td class="fw-bold">@log.Employee?.FullName</td>
-                            <td><span class="badge bg-lavender text-purple">@log.HoursWorked ч.</span></td>
-                            <td class="fw-bold text-purple-dark">@log.TotalSalary.ToString("N0") ₽</td>
-                            <td class="text-center">
-                                <button class="btn btn-sm text-danger" @onclick="() => DeleteLog(log.Id)"><i class="bi bi-trash3"></i></button>
+                            <td class="fw-semibold">@log.Employee?.FullName</td>
+                            <td><span class="badge bg-lavender text-purple">@log.HoursWorked ч</span></td>
+                            <td class="text-muted">@log.HourlyRate.ToString("N0") ₽/ч</td>
+                            <td class="text-end fw-semibold">@log.TotalSalary.ToString("N0") ₽</td>
+                            <td class="text-end pe-4">
+                                <button class="btn-icon danger" title="Удалить запись" @onclick="() => DeleteLog(log)"><i class="bi bi-trash3"></i></button>
                             </td>
                         </tr>
                     }
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>
-
-<style>
-    .payroll-container {
-        min-height: 100vh;
-        background-color: #f3f0f7;
-    }
-
-    .text-purple {
-        color: #6f42c1;
-    }
-
-    .text-purple-dark {
-        color: #4b2c85;
-    }
-
-    .bg-purple-light {
-        background-color: #f8f6ff;
-    }
-
-    .bg-lavender {
-        background-color: #e9e4ff;
-    }
-
-    .br-15 {
-        border-radius: 15px;
-    }
-
-    .btn-purple {
-        background-color: #6f42c1;
-        color: white;
-    }
-
-    .custom-input {
-        border: 1px solid #e1ddec;
-        border-radius: 8px;
-        padding: 0.6rem;
-    }
-
-    .custom-input-text {
-        background-color: white;
-        border: 1px solid #e1ddec;
-        border-left: none;
-        color: #6f42c1;
-    }
-</style>
 
 @code {
     private List<Employee> employees = new();
     private List<WorkLog> workLogs = new();
     private WorkLog newLog = new() { HoursWorked = 8 };
+    private string? error;
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
     private async Task LoadData()
     {
-        employees = await DbContext.Employees.Include(e => e.Position).Include(e => e.Department).ToListAsync();
-        workLogs = await DbContext.WorkLogs.Include(l => l.Employee).OrderByDescending(l => l.Date).ToListAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        employees = await db.Employees.Include(e => e.Position).Include(e => e.Department)
+            .OrderBy(e => e.FullName).ToListAsync();
+        workLogs = await db.WorkLogs.Include(l => l.Employee).OrderByDescending(l => l.Date).ToListAsync();
     }
 
     private void OnEmployeeSelected(ChangeEventArgs e)
     {
-        if (int.TryParse(e.Value?.ToString(), out int id))
-        {
-            newLog.EmployeeId = id;
-            var emp = employees.FirstOrDefault(x => x.Id == id);
-            if (emp?.Position != null) newLog.HourlyRate = emp.Position.BaseSalary;
-        }
+        newLog.EmployeeId = int.TryParse(e.Value?.ToString(), out int id) ? id : 0;
+        var emp = employees.FirstOrDefault(x => x.Id == newLog.EmployeeId);
+        if (emp?.Position != null) newLog.HourlyRate = emp.Position.BaseSalary;
     }
 
     private async Task AddWorkLog()
     {
-        if (newLog.EmployeeId == 0) return;
+        error = newLog switch
+        {
+            { EmployeeId: 0 } => "Выберите сотрудника.",
+            { HoursWorked: <= 0 or > 24 } => "Часы должны быть от 0 до 24 за одну запись.",
+            { HourlyRate: <= 0 } => "Ставка должна быть больше нуля.",
+            _ => null
+        };
+        if (error != null) return;
+
         newLog.Date = DateTime.Now;
-        DbContext.WorkLogs.Add(newLog);
-        await DbContext.SaveChangesAsync();
-        newLog = new WorkLog { HoursWorked = 8, HourlyRate = newLog.HourlyRate };
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            db.WorkLogs.Add(newLog);
+            await db.SaveChangesAsync();
+        }
+        newLog = new WorkLog { HoursWorked = 8 };
         await LoadData();
     }
 
-    private async Task DeleteLog(int id)
+    private async Task DeleteLog(WorkLog log)
     {
-        var log = await DbContext.WorkLogs.FindAsync(id);
-        if (log != null) { DbContext.WorkLogs.Remove(log); await DbContext.SaveChangesAsync(); await LoadData(); }
+        if (!await JS.InvokeAsync<bool>("confirm", $"Удалить запись {log.Employee?.FullName} от {log.Date:d}?")) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await db.WorkLogs.Where(l => l.Id == log.Id).ExecuteDeleteAsync();
+        await LoadData();
     }
 }

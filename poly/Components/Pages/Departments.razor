@@ -1,46 +1,70 @@
 ﻿@page "/departments"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
 @using poly.Models
 @using poly.Data
 @using Microsoft.EntityFrameworkCore
-@inject ApplicationDbContext DbContext
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
-<div class="departments-container py-4">
-    <div class="container">
-        <h3 class="mb-4 text-purple fw-bold"><i class="bi bi-diagram-3-fill me-2"></i>Отделы предприятия</h3>
+<PageTitle>Отделы</PageTitle>
 
-        <div class="card border-0 shadow-sm mb-4 br-15">
-            <div class="card-body p-4">
-                <h5 class="card-title text-muted mb-4">Создать новый отдел</h5>
-                <div class="row g-3">
-                    <div class="col-md-5">
-                        <input type="text" class="form-control custom-input" placeholder="Название (например: ИТ-отдел)" @bind="newDept.Name" />
-                    </div>
-                    <div class="col-md-4">
-                        <input type="text" class="form-control custom-input" placeholder="Описание" @bind="newDept.Description" />
-                    </div>
-                    <div class="col-md-3">
-                        <button class="btn btn-purple w-100 rounded-pill py-2" @onclick="AddDept">Добавить</button>
-                    </div>
-                </div>
+<div class="page-bg">
+    <div class="container">
+        <div class="page-header">
+            <div>
+                <h3 class="page-title"><i class="bi bi-diagram-3"></i>Отделы</h3>
+                <p class="page-subtitle">Структура предприятия и численность подразделений</p>
             </div>
         </div>
 
+        <div class="card br-15 mb-4">
+            <div class="card-body p-4">
+                <h5 class="card-title mb-3">Новый отдел</h5>
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label">Название</label>
+                        <input type="text" class="form-control" placeholder="Например: ИТ-отдел" @bind="newDept.Name" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Описание</label>
+                        <input type="text" class="form-control" placeholder="Чем занимается отдел" @bind="newDept.Description" />
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-purple w-100 py-2" @onclick="AddDept"><i class="bi bi-plus-lg me-1"></i>Добавить</button>
+                    </div>
+                </div>
+                @if (error != null)
+                {
+                    <div class="alert alert-danger mt-3 mb-0">@error</div>
+                }
+            </div>
+        </div>
+
+        @if (!depts.Any())
+        {
+            <div class="card br-15">
+                <div class="empty-state"><i class="bi bi-diagram-3"></i>Отделов пока нет. Создайте первый отдел выше.</div>
+            </div>
+        }
         <div class="row g-4">
             @foreach (var dept in depts)
             {
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm br-15 h-100">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between">
-                                <h5 class="fw-bold text-purple-dark">@dept.Name</h5>
-                                <button class="btn btn-sm text-danger" @onclick="() => DeleteDept(dept.Id)"><i class="bi bi-x-lg"></i></button>
+                <div class="col-md-6 col-xl-4">
+                    <div class="card br-15 h-100 card-hover">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="d-flex align-items-center gap-3">
+                                    <span class="dept-avatar">@dept.Name.Substring(0, 1).ToUpper()</span>
+                                    <h5 class="fw-semibold mb-0">@dept.Name</h5>
+                                </div>
+                                <button class="btn-icon danger" title="Удалить отдел" @onclick="() => DeleteDept(dept)"><i class="bi bi-trash3"></i></button>
                             </div>
-                            <p class="text-muted small">@dept.Description</p>
-                            <hr class="opacity-25">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-lavender text-purple">@dept.Employees.Count сотрудников</span>
-                                <a href="employees" class="btn btn-link btn-sm text-purple p-0">Список</a>
+                            <p class="text-muted small flex-grow-1 mb-3">@(string.IsNullOrWhiteSpace(dept.Description) ? "Без описания" : dept.Description)</p>
+                            <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                                <span class="badge bg-lavender text-purple"><i class="bi bi-people me-1"></i>@dept.Employees.Count @EmployeesWord(dept.Employees.Count)</span>
+                                <a href="employees?dept=@dept.Id" class="small fw-semibold text-decoration-none">Сотрудники <i class="bi bi-arrow-right"></i></a>
                             </div>
                         </div>
                     </div>
@@ -50,62 +74,61 @@
     </div>
 </div>
 
-<style>
-    .departments-container {
-        min-height: 100vh;
-        background-color: #f3f0f7;
-    }
-
-    .text-purple {
-        color: #6f42c1;
-    }
-
-    .text-purple-dark {
-        color: #4b2c85;
-    }
-
-    .bg-lavender {
-        background-color: #e9e4ff;
-    }
-
-    .br-15 {
-        border-radius: 15px;
-    }
-
-    .btn-purple {
-        background-color: #6f42c1;
-        color: white;
-    }
-
-    .custom-input {
-        border: 1px solid #e1ddec;
-        border-radius: 8px;
-        padding: 0.6rem;
-    }
-</style>
-
 @code {
     private List<Department> depts = new();
     private Department newDept = new();
+    private string? error;
 
     protected override async Task OnInitializedAsync() => await Load();
 
-    private async Task Load() => depts = await DbContext.Departments.Include(d => d.Employees).ToListAsync();
+    private async Task Load()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        depts = await db.Departments.Include(d => d.Employees).OrderBy(d => d.Name).ToListAsync();
+    }
 
     private async Task AddDept()
     {
-        if (!string.IsNullOrWhiteSpace(newDept.Name))
+        error = null;
+        newDept.Name = newDept.Name.Trim();
+        if (string.IsNullOrWhiteSpace(newDept.Name))
         {
-            DbContext.Departments.Add(newDept);
-            await DbContext.SaveChangesAsync();
-            newDept = new();
-            await Load();
+            error = "Введите название отдела.";
+            return;
         }
+        if (depts.Any(d => d.Name.Equals(newDept.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            error = "Отдел с таким названием уже есть.";
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Departments.Add(newDept);
+        await db.SaveChangesAsync();
+        newDept = new();
+        await Load();
     }
 
-    private async Task DeleteDept(int id)
+    private async Task DeleteDept(Department dept)
     {
-        var d = await DbContext.Departments.FindAsync(id);
-        if (d != null) { DbContext.Departments.Remove(d); await DbContext.SaveChangesAsync(); await Load(); }
+        error = null;
+        if (dept.Employees.Count > 0)
+        {
+            error = $"В отделе «{dept.Name}» есть сотрудники. Сначала переведите их в другой отдел.";
+            return;
+        }
+        if (!await JS.InvokeAsync<bool>("confirm", $"Удалить отдел «{dept.Name}»?")) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await db.Departments.Where(d => d.Id == dept.Id).ExecuteDeleteAsync();
+        await Load();
     }
+
+    private static string EmployeesWord(int n) => (n % 100, n % 10) switch
+    {
+        ( >= 11 and <= 14, _) => "сотрудников",
+        (_, 1) => "сотрудник",
+        (_, >= 2 and <= 4) => "сотрудника",
+        _ => "сотрудников"
+    };
 }

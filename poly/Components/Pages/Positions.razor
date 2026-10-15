@@ -1,77 +1,85 @@
 ﻿@page "/positions"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
 @using poly.Models
 @using poly.Data
 @using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
 @rendermode InteractiveServer
-@inject ApplicationDbContext DbContext
 
-<PageTitle>Справочник должностей</PageTitle>
+<PageTitle>Должности</PageTitle>
 
-<div class="positions-container py-4">
+<div class="page-bg">
     <div class="container">
-        <h3 class="mb-4 text-purple fw-bold"><i class="bi bi-briefcase-fill me-2"></i>Справочник должностей</h3>
+        <div class="page-header">
+            <div>
+                <h3 class="page-title"><i class="bi bi-briefcase"></i>Должности</h3>
+                <p class="page-subtitle">Штатные единицы и почасовые ставки</p>
+            </div>
+        </div>
 
-        <!-- Панель добавления -->
-        <div class="card border-0 shadow-sm mb-4 br-15">
+        <div class="card br-15 mb-4">
             <div class="card-body p-4">
-                <h5 class="card-title text-muted mb-4">Создать новую штатную единицу</h5>
+                <h5 class="card-title mb-3">Новая должность</h5>
                 <div class="row g-3">
                     <div class="col-md-5">
-                        <label class="form-label small fw-bold text-secondary">Название должности</label>
+                        <label class="form-label">Название должности</label>
                         <input type="text" class="form-control custom-input" placeholder="Например: Старший аналитик" @bind="newPos.Title" />
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label small fw-bold text-secondary">Часовая ставка</label>
+                        <label class="form-label">Часовая ставка</label>
                         <div class="input-group">
-                            <input type="number" class="form-control custom-input border-end-0" @bind="newPos.BaseSalary" />
+                            <input type="number" min="0" step="0.01" class="form-control custom-input border-end-0" @bind="newPos.BaseSalary" />
                             <span class="input-group-text custom-input-text">₽ / час</span>
                         </div>
                     </div>
                     <div class="col-md-3 d-flex align-items-end">
-                        <button class="btn btn-purple w-100 rounded-pill py-2 shadow-sm" @onclick="AddPosition">
+                        <button class="btn btn-purple w-100 py-2" @onclick="AddPosition">
                             <i class="bi bi-plus-lg me-2"></i>Добавить
                         </button>
                     </div>
                 </div>
+                @if (error != null)
+                {
+                    <div class="alert alert-danger mt-3 mb-0">@error</div>
+                }
             </div>
         </div>
 
-        <!-- Список должностей -->
-        <div class="card border-0 shadow-sm br-15 overflow-hidden">
+        <div class="card br-15 overflow-hidden">
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-purple-light">
+                <table class="table table-hover align-middle">
+                    <thead>
                         <tr>
-                            <th class="ps-4" style="width: 100px;">ID</th>
+                            <th class="ps-4" style="width: 90px;">№</th>
                             <th>Наименование</th>
-                            <th>Ставка (в час)</th>
-                            <th class="text-center" style="width: 150px;">Действия</th>
+                            <th>Ставка в час</th>
+                            <th>Сотрудников</th>
+                            <th class="text-end pe-4" style="width: 120px;"></th>
                         </tr>
                     </thead>
                     <tbody>
                         @if (positions == null)
                         {
-                            <tr><td colspan="4" class="text-center py-5 text-muted">Загрузка данных...</td></tr>
+                            <tr><td colspan="5" class="empty-state">Загрузка данных...</td></tr>
                         }
                         else if (!positions.Any())
                         {
-                            <tr><td colspan="4" class="text-center py-5 text-muted">Список должностей пуст. Добавьте первую запись выше.</td></tr>
+                            <tr><td colspan="5" class="empty-state"><i class="bi bi-briefcase"></i>Должностей пока нет. Добавьте первую выше.</td></tr>
                         }
                         else
                         {
                             @foreach (var pos in positions)
                             {
                                 <tr>
-                                    <td class="ps-4 text-muted">#@pos.Id</td>
-                                    <td class="fw-bold text-purple-dark">@pos.Title</td>
-                                    <td>
-                                        <span class="badge bg-lavender text-purple px-3 py-2">
-                                            @pos.BaseSalary.ToString("N0") ₽
-                                        </span>
-                                    </td>
-                                    <td class="text-center">
-                                        <button class="btn btn-sm btn-outline-danger border-0" @onclick="() => DeletePosition(pos)">
-                                            <i class="bi bi-trash3-fill"></i>
+                                    <td class="ps-4 text-muted">@pos.Id</td>
+                                    <td class="fw-semibold">@pos.Title</td>
+                                    <td><span class="badge bg-lavender text-purple">@pos.BaseSalary.ToString("N0") ₽</span></td>
+                                    <td class="text-muted">@EmployeeCount(pos.Id)</td>
+                                    <td class="text-end pe-4">
+                                        <button class="btn-icon danger" title="Удалить должность" @onclick="() => DeletePosition(pos)">
+                                            <i class="bi bi-trash3"></i>
                                         </button>
                                     </td>
                                 </tr>
@@ -84,102 +92,59 @@
     </div>
 </div>
 
-<style>
-    .positions-container {
-        min-height: 100vh;
-        background-color: #f3f0f7;
-    }
-
-    .text-purple {
-        color: #6f42c1;
-    }
-
-    .text-purple-dark {
-        color: #4b2c85;
-    }
-
-    .bg-purple-light {
-        background-color: #f8f6ff;
-    }
-
-    .bg-lavender {
-        background-color: #e9e4ff;
-    }
-
-    .br-15 {
-        border-radius: 15px;
-    }
-
-    .btn-purple {
-        background-color: #6f42c1;
-        color: white;
-        transition: 0.3s;
-    }
-
-        .btn-purple:hover {
-            background-color: #59359a;
-            color: white;
-            transform: translateY(-2px);
-        }
-
-    .custom-input {
-        border: 1px solid #e1ddec;
-        border-radius: 8px;
-        padding: 0.6rem;
-    }
-
-        .custom-input:focus {
-            border-color: #a389d4;
-            box-shadow: 0 0 0 0.2rem rgba(111, 66, 193, 0.1);
-        }
-
-    .custom-input-text {
-        background-color: white;
-        border: 1px solid #e1ddec;
-        border-left: none;
-        color: #6f42c1;
-    }
-
-    .table thead th {
-        font-weight: 600;
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: #6f42c1;
-        border-bottom: none;
-        padding: 1.2rem 0.75rem;
-    }
-</style>
-
 @code {
     private List<Position>? positions;
+    private Dictionary<int, int> employeeCounts = new();
     private Position newPos = new();
+    private string? error;
 
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadPositions();
-    }
+    protected override async Task OnInitializedAsync() => await LoadPositions();
 
     private async Task LoadPositions()
     {
-        positions = await DbContext.Positions.ToListAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        positions = await db.Positions.OrderBy(p => p.Title).ToListAsync();
+        employeeCounts = await db.Employees
+            .GroupBy(e => e.PositionId)
+            .ToDictionaryAsync(g => g.Key, g => g.Count());
     }
+
+    private int EmployeeCount(int positionId) => employeeCounts.GetValueOrDefault(positionId);
 
     private async Task AddPosition()
     {
-        if (!string.IsNullOrWhiteSpace(newPos.Title))
+        error = null;
+        newPos.Title = newPos.Title.Trim();
+        if (string.IsNullOrWhiteSpace(newPos.Title))
         {
-            DbContext.Positions.Add(newPos);
-            await DbContext.SaveChangesAsync();
-            newPos = new Position();
-            await LoadPositions();
+            error = "Введите название должности.";
+            return;
         }
+        if (newPos.BaseSalary <= 0)
+        {
+            error = "Часовая ставка должна быть больше нуля.";
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Positions.Add(newPos);
+        await db.SaveChangesAsync();
+        newPos = new Position();
+        await LoadPositions();
     }
 
     private async Task DeletePosition(Position pos)
     {
-        DbContext.Positions.Remove(pos);
-        await DbContext.SaveChangesAsync();
+        error = null;
+        if (EmployeeCount(pos.Id) > 0)
+        {
+            error = $"Должность «{pos.Title}» занята сотрудниками. Сначала переведите их на другую должность.";
+            return;
+        }
+        if (!await JS.InvokeAsync<bool>("confirm", $"Удалить должность «{pos.Title}»?")) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await db.Positions.Where(p => p.Id == pos.Id).ExecuteDeleteAsync();
         await LoadPositions();
     }
 }

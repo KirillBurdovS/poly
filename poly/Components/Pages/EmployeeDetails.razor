@@ -1,78 +1,95 @@
 ﻿@page "/employees/{Id:int}"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
 @using poly.Models
 @using poly.Data
 @using Microsoft.EntityFrameworkCore
-@inject ApplicationDbContext DbContext
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @rendermode InteractiveServer
 
-<div class="employees-container py-4">
+<PageTitle>Карточка сотрудника</PageTitle>
+
+<div class="page-bg">
     <div class="container">
-        @if (employee == null)
+        @if (loading)
         {
-            <p>Загрузка...</p>
+            <div class="empty-state">Загрузка...</div>
+        }
+        else if (employee == null)
+        {
+            <div class="card br-15">
+                <div class="empty-state"><i class="bi bi-person-x"></i>Сотрудник не найден. <a href="employees">Вернуться к списку</a></div>
+            </div>
         }
         else
         {
-            <div class="d-flex align-items-center mb-4">
-                <a href="employees" class="btn btn-outline-purple rounded-circle me-3">
-                    <i class="bi bi-arrow-left"></i>
-                </a>
-                <h3 class="text-purple fw-bold mb-0">Карточка сотрудника</h3>
+            <div class="page-header">
+                <div class="d-flex align-items-center gap-3">
+                    <a href="employees" class="btn-icon border" title="Назад к списку"><i class="bi bi-arrow-left"></i></a>
+                    <h3 class="page-title">Карточка сотрудника</h3>
+                </div>
             </div>
 
             <div class="row g-4">
-                <!-- Основные данные -->
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm br-15 p-4 text-center">
-                        <div class="mx-auto bg-lavender text-purple rounded-circle d-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
-                            <i class="bi bi-person-fill fs-1"></i>
-                        </div>
-                        <h4 class="fw-bold text-purple-dark">@employee.FullName</h4>
-                        <span class="badge bg-lavender text-purple mb-3">@(employee.Position?.Title ?? "—")</span>
-                        <hr>
-                        <div class="text-start">
-                            <p class="small text-muted mb-1">Отдел</p>
-                            <p class="fw-bold">@(employee.Department?.Name ?? "—")</p>
-                            <p class="small text-muted mb-1">Текущий оклад</p>
-                            <p class="fw-bold">@employee.Salary.ToString("N0") ₽</p>
+                <div class="col-lg-4">
+                    <div class="card br-15 overflow-hidden">
+                        <div class="profile-cover"></div>
+                        <div class="card-body px-4 pb-4 pt-0 text-center">
+                            <div class="profile-avatar">@string.Concat(employee.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpper(p[0])))</div>
+                            <h4 class="fw-bold mb-1">@employee.FullName</h4>
+                            <div class="text-muted mb-3">@(employee.Position?.Title ?? "—")</div>
+                            <span class="badge @employee.Status.BadgeClass()">@employee.Status.ToText()</span>
+                            <div class="profile-facts">
+                                <div><span>Отдел</span><strong>@(employee.Department?.Name ?? "—")</strong></div>
+                                <div><span>Оклад</span><strong>@employee.Salary.ToString("N0") ₽</strong></div>
+                                <div><span>Ставка</span><strong>@((employee.Position?.BaseSalary ?? 0).ToString("N0")) ₽/ч</strong></div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Статистика выплат -->
-                <div class="col-md-8">
-                    <div class="card border-0 shadow-sm br-15 p-4 mb-4">
-                        <h5 class="fw-bold text-purple-dark mb-3">История начислений</h5>
-                        <div class="row text-center">
-                            <div class="col-6 border-end">
-                                <div class="small text-muted">Всего отработано</div>
-                                <div class="h3 fw-bold text-purple">@logs.Sum(l => l.HoursWorked) ч.</div>
+                <div class="col-lg-8">
+                    <div class="row g-3 mb-4">
+                        <div class="col-sm-6">
+                            <div class="card br-15 p-4 h-100">
+                                <div class="text-muted small mb-1">Всего отработано</div>
+                                <div class="h3 fw-bold mb-0">@logs.Sum(l => l.HoursWorked) ч</div>
                             </div>
-                            <div class="col-6">
-                                <div class="small text-muted">Выплачено за всё время</div>
-                                <div class="h3 fw-bold text-success">@logs.Sum(l => l.TotalSalary).ToString("N0") ₽</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="card br-15 p-4 h-100">
+                                <div class="text-muted small mb-1">Начислено по часам за всё время</div>
+                                <div class="h3 fw-bold mb-0 text-purple">@logs.Sum(l => l.TotalSalary).ToString("N0") ₽</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="card border-0 shadow-sm br-15 overflow-hidden">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="bg-purple-light">
+                    <div class="card br-15 overflow-hidden">
+                        <div class="px-4 py-3 d-flex justify-content-between align-items-center border-bottom">
+                            <h5 class="card-title mb-0">История начислений</h5>
+                            <span class="small text-muted">последние 10 записей</span>
+                        </div>
+                        <table class="table table-hover align-middle">
+                            <thead>
                                 <tr>
                                     <th class="ps-4">Дата</th>
                                     <th>Часы</th>
                                     <th>Ставка</th>
-                                    <th>Итого</th>
+                                    <th class="text-end pe-4">Итого</th>
                                 </tr>
                             </thead>
                             <tbody>
+                                @if (!logs.Any())
+                                {
+                                    <tr><td colspan="4" class="empty-state"><i class="bi bi-clock-history"></i>Начислений пока нет</td></tr>
+                                }
                                 @foreach (var log in logs.Take(10))
                                 {
                                     <tr>
-                                        <td class="ps-4">@log.Date.ToShortDateString()</td>
-                                        <td>@log.HoursWorked ч.</td>
-                                        <td>@log.HourlyRate.ToString("N0") ₽</td>
-                                        <td class="fw-bold">@log.TotalSalary.ToString("N0") ₽</td>
+                                        <td class="ps-4 text-muted">@log.Date.ToShortDateString()</td>
+                                        <td>@log.HoursWorked ч</td>
+                                        <td>@log.HourlyRate.ToString("N0") ₽/ч</td>
+                                        <td class="text-end pe-4 fw-semibold">@log.TotalSalary.ToString("N0") ₽</td>
                                     </tr>
                                 }
                             </tbody>
@@ -84,56 +101,27 @@
     </div>
 </div>
 
-<style>
-    .employees-container {
-        min-height: 100vh;
-        background-color: #f3f0f7;
-    }
-
-    .text-purple {
-        color: #6f42c1;
-    }
-
-    .text-purple-dark {
-        color: #4b2c85;
-    }
-
-    .bg-lavender {
-        background-color: #e9e4ff;
-    }
-
-    .br-15 {
-        border-radius: 15px;
-    }
-
-    .bg-purple-light {
-        background-color: #f8f6ff;
-    }
-
-    .btn-outline-purple {
-        color: #6f42c1;
-        border-color: #6f42c1;
-    }
-</style>
-
 @code {
     [Parameter] public int Id { get; set; }
     private Employee? employee;
     private List<WorkLog> logs = new();
+    private bool loading = true;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        employee = await DbContext.Employees
+        loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        employee = await db.Employees
             .Include(e => e.Position)
             .Include(e => e.Department)
             .FirstOrDefaultAsync(e => e.Id == Id);
 
-        if (employee != null)
-        {
-            logs = await DbContext.WorkLogs
+        logs = employee == null
+            ? new()
+            : await db.WorkLogs
                 .Where(l => l.EmployeeId == Id)
                 .OrderByDescending(l => l.Date)
                 .ToListAsync();
-        }
+        loading = false;
     }
 }
